@@ -52,6 +52,10 @@ class IngestionManager:
             # 获取最近 5 天的行情
             hist = ticker.history(period="5d")
             
+            # 关键修复：将 Timestamp 索引转换为字符串，否则 json.dumps 会报错
+            if not hist.empty:
+                hist.index = hist.index.strftime('%Y-%m-%d')
+            
             # 获取公司基本信息
             info = ticker.info
             
