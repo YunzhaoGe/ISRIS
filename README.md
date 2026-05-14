@@ -18,27 +18,37 @@
 - **AI Engine**: LiteLLM (OpenAI, Claude, etc.)
 - **Database**: PostgreSQL (TimescaleDB), Redis, Neo4j (Planned)
 
-## 🚀 快速开始
+## 🚀 快速开始 (Recommended with `uv`)
+
+建议使用 [uv](https://github.com/astral-sh/uv) 进行极速包管理。
 
 ### 1. 克隆仓库
 ```bash
-git clone https://github.com/your-username/ISRIS.git
+git clone https://github.com/YunzhaoGe/ISRIS.git
 cd ISRIS
 ```
 
-### 2. 安装依赖
+### 2. 初始化环境并安装依赖
 ```bash
-pip install -r requirements.txt
+# 生成锁文件并同步环境
+uv sync
 ```
 
 ### 3. 启动 API 服务器
 ```bash
-python -m src.isris.api.main
+uv run python -m src.isris.api.main
 ```
 
 ### 4. 运行验证脚本
 ```bash
-python verify_isris.py
+uv run python verify_isris.py
+```
+
+### 💡 传统方式 (pip)
+如果您不使用 `uv`，仍然可以使用传统方式：
+```bash
+pip install -r requirements.txt
+python -m src.isris.api.main
 ```
 
 ## 📂 项目结构
