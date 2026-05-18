@@ -51,5 +51,6 @@ async def get_report(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+    # 修改为 127.0.0.1 确保本地回环连接稳定
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -22,18 +22,46 @@ class IngestionManager:
         """
         获取与股票相关的实时新闻和社交媒体讨论。
         """
-        # TODO: 这里应该集成真正的 Horizon Scrapers
-        # 目前返回更高质量的 Mock 数据模拟抓取结果
-        items = [
-            ContentItem(
-                id=f"news-{i}",
-                title=f"{stock_identifier} Update: Market sentiment remains volatile",
-                content="Analysts are closely watching the upcoming earnings call...",
+        self.logger.info(f"Fetching real news for {stock_identifier} via RSS...")
+        
+        items = []
+        # 使用 Yahoo Finance 的 RSS 作为示例源
+        rss_url = f"https://finance.yahoo.com/rss/headline?s={stock_identifier}"
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(rss_url, timeout=10.0)
+                if response.status_code == 200:
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(response.content)
+                    for channel in root.findall("channel"):
+                        for item in channel.findall("item")[:10]: # 限制 10 条
+                            title = item.find("title").text
+                            link = item.find("link").text
+                            pub_date_str = item.find("pubDate").text
+                            # 简单转换时间，生产环境建议用 dateutil
+                            items.append(ContentItem(
+                                id=link,
+                                title=title,
+                                content=title, # RSS 通常只给标题
+                                url=link,
+                                source_type=SourceType.NEWS,
+                                publish_time=datetime.now(timezone.utc) # 简化处理
+                            ))
+            except Exception as e:
+                self.logger.error(f"Error fetching RSS news: {e}")
+
+        # 如果 RSS 失败，返回一个保底的占位符
+        if not items:
+            items.append(ContentItem(
+                id="manual-1",
+                title=f"Monitoring {stock_identifier} for major events",
+                content="System is scanning for news updates...",
                 url=f"https://finance.yahoo.com/quote/{stock_identifier}",
                 source_type=SourceType.NEWS,
-                publish_time=datetime.now(timezone.utc) - timedelta(hours=i*5)
-            ) for i in range(3)
-        ]
+                publish_time=datetime.now(timezone.utc)
+            ))
+            
         return items
 
     async def fetch_market_data(self, stock_identifier: str) -> Dict[str, Any]:

@@ -9,16 +9,24 @@ async def verify_isris():
     
     print(f"🚀 Starting ISRIS Verification for {stock_id}...")
 
-    async with httpx.AsyncClient() as client:
+    # 增加超时时间到 30 秒，防止网络波动导致连接失败
+    async with httpx.AsyncClient(timeout=30.0) as client:
         # 1. 提交分析请求
         print(f"📡 Sending analysis request for {stock_id}...")
         try:
             response = await client.post(f"{base_url}/analyze", json={"stock_identifier": stock_id})
-            response.raise_for_status()
-            task_id = response.json()["task_id"]
+            # 如果返回了错误状态码，抛出异常
+            if response.status_code != 200:
+                print(f"❌ Server returned error: {response.status_code} - {response.text}")
+                return
+                
+            task_id = response.json().get("task_id")
+            if not task_id:
+                print(f"❌ Failed to get task_id from response: {response.text}")
+                return
             print(f"✅ Task submitted successfully. Task ID: {task_id}")
         except Exception as e:
-            print(f"❌ Failed to submit task. Is the server running? Error: {e}")
+            print(f"❌ Exception occurred: {type(e).__name__}: {str(e)}")
             return
 
         # 2. 轮询状态
