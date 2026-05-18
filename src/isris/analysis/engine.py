@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    from litellm import completion
+    from litellm import acompletion as completion
 except ImportError:
     completion = None
 
@@ -21,8 +21,10 @@ class RiskAnalysisEngine:
 
     def __init__(self, ai_config: dict = None):
         self.ai_config = ai_config or {}
-        # 默认使用 GPT-4o-mini (性价比高且逻辑强)，可以根据需要更改
-        self.model = self.ai_config.get("model", "gpt-4o-mini")
+        # 优先从环境变量读取配置，方便用户灵活切换
+        self.model = os.getenv("AI_MODEL", self.ai_config.get("model", "gpt-4o-mini"))
+        self.api_key = os.getenv("AI_API_KEY")
+        self.api_base = os.getenv("AI_API_BASE")
         self.logger = logging.getLogger(__name__)
 
     async def analyze_risk(
@@ -56,13 +58,15 @@ class RiskAnalysisEngine:
             return self._generate_simulated_report(stock_id, content_items, market_data)
 
         try:
-            # 调用 LiteLLM
+            # 调用 LiteLLM，显式传入自定义的 api_key 和 api_base
             response = await completion(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": RISK_ANALYSIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
+                api_key=self.api_key,
+                api_base=self.api_base,
                 response_format={"type": "json_object"}
             )
             

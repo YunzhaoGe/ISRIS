@@ -5,12 +5,19 @@ import sys
 
 async def verify_isris():
     base_url = "http://127.0.0.1:8000"
-    stock_id = "AAPL"
+    
+    # 支持用户输入，默认为 AAPL
+    print("\n" + "="*50)
+    user_input = input("请输入要分析的股票代码 (例如: AAPL, TSLA, NVDA) [默认 AAPL]: ").strip()
+    stock_id = user_input.upper() if user_input else "AAPL"
+    print("="*50 + "\n")
     
     print(f"🚀 Starting ISRIS Verification for {stock_id}...")
 
-    # 增加超时时间到 30 秒，防止网络波动导致连接失败
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # 禁用代理访问 127.0.0.1，防止代理拦截本地请求
+    # 增加连接超时时间到 60 秒
+    transport = httpx.AsyncHTTPTransport(proxy=None)
+    async with httpx.AsyncClient(timeout=60.0, transport=transport) as client:
         # 1. 提交分析请求
         print(f"📡 Sending analysis request for {stock_id}...")
         try:
@@ -30,11 +37,16 @@ async def verify_isris():
             return
 
         # 2. 轮询状态
-        print("⏳ Polling for report generation...")
-        for _ in range(10):
+        print("⏳ Polling for report generation (Up to 120s)...")
+        # 增加到 60 次轮询，每次 2s，总计 120s
+        for i in range(60):
             await asyncio.sleep(2)
-            report_response = await client.get(f"{base_url}/report/{task_id}")
-            report_data = report_response.json()
+            try:
+                report_response = await client.get(f"{base_url}/report/{task_id}")
+                report_data = report_response.json()
+            except Exception as e:
+                print(f"   [Wait] Error polling status: {e}")
+                continue
             
             status = report_data.get("status")
             if status == "completed" or "overall_risk_score" in report_data:
@@ -44,12 +56,22 @@ async def verify_isris():
                 print(f"Overall Risk Score: {report_data.get('overall_risk_score')}/100")
                 print(f"Risk Level: {report_data.get('risk_level')}")
                 print(f"Summary: {report_data.get('summary')}")
+                
+                # 打印前两个风险点
+                key_risks = report_data.get("key_risks", [])
+                if key_risks:
+                    print("\nKey Risks:")
+                    for risk in key_risks[:2]:
+                        print(f"  • [{risk.get('factor')}] {risk.get('description')}")
+                
                 print("="*50)
                 return
             else:
-                print(f"   Current Status: {status}...")
+                # 每 10 秒打印一次进度
+                if i % 5 == 0:
+                    print(f"   Current Status: {status}...")
         
-        print("⚠️ Timeout: Report generation taking longer than expected.")
+        print("⚠️ Timeout: Report generation taking longer than expected. Please check server logs.")
 
 if __name__ == "__main__":
     # 提醒用户先启动服务器

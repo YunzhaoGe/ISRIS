@@ -66,26 +66,30 @@ class IngestionManager:
 
     async def fetch_market_data(self, stock_identifier: str) -> Dict[str, Any]:
         """
-        获取市场行情数据和基础财务信息。
+        获取市场行情数据和基础财务信息。使用 asyncio.to_thread 防止阻塞。
         """
         if not yf:
             self.logger.warning("yfinance not installed, returning empty market data")
             return {}
 
         self.logger.info(f"Fetching market data for {stock_identifier}")
-        try:
-            # yfinance 的调用通常是阻塞的，在大规模系统中应放在 thread pool 中执行
+        
+        def _get_data():
             ticker = yf.Ticker(stock_identifier)
-            
-            # 获取最近 5 天的行情
+            # history 和 info 都是同步网络调用
             hist = ticker.history(period="5d")
-            
-            # 关键修复：将 Timestamp 索引转换为字符串，否则 json.dumps 会报错
             if not hist.empty:
                 hist.index = hist.index.strftime('%Y-%m-%d')
-            
-            # 获取公司基本信息
-            info = ticker.info
+            return {
+                "info": ticker.info,
+                "history": hist
+            }
+
+        try:
+            # 在独立线程中运行同步调用
+            data = await asyncio.to_thread(_get_data)
+            info = data["info"]
+            hist = data["history"]
             
             return {
                 "current_price": info.get("currentPrice") or info.get("regularMarketPrice"),
