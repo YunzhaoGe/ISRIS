@@ -1,5 +1,16 @@
 import uuid
+import logging
 from typing import Optional, Dict
+from datetime import datetime
+
+# --- 日志配置开始 ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger("isris.api")
+# --- 日志配置结束 ---
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
