@@ -18,15 +18,32 @@ class IngestionManager:
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
 
+    def _normalize_ticker(self, ticker: str) -> str:
+        """
+        标准化股票代码，自动处理 A 股和港股后缀。
+        """
+        ticker = ticker.upper().strip()
+        # 处理 6 位数字代码 (A 股)
+        if len(ticker) == 6 and ticker.isdigit():
+            if ticker.startswith(('6', '9')): # 沪市
+                return f"{ticker}.SS"
+            else: # 深市或北交所
+                return f"{ticker}.SZ"
+        # 处理 4 位或 5 位数字代码 (港股)
+        if (len(ticker) == 4 or len(ticker) == 5) and ticker.isdigit():
+            return f"{ticker.zfill(5)}.HK"
+        return ticker
+
     async def fetch_stock_news(self, stock_identifier: str, days: int = 30) -> List[ContentItem]:
         """
         获取与股票相关的实时新闻和社交媒体讨论。
         """
-        self.logger.info(f"Fetching real news for {stock_identifier} via RSS...")
+        ticker = self._normalize_ticker(stock_identifier)
+        self.logger.info(f"Fetching real news for {ticker} via RSS...")
         
         items = []
         # 使用 Yahoo Finance 的 RSS 作为示例源
-        rss_url = f"https://finance.yahoo.com/rss/headline?s={stock_identifier}"
+        rss_url = f"https://finance.yahoo.com/rss/headline?s={ticker}"
         
         async with httpx.AsyncClient() as client:
             try:
@@ -68,14 +85,15 @@ class IngestionManager:
         """
         获取市场行情数据和基础财务信息。使用 asyncio.to_thread 防止阻塞。
         """
+        ticker_symbol = self._normalize_ticker(stock_identifier)
         if not yf:
             self.logger.warning("yfinance not installed, returning empty market data")
             return {}
 
-        self.logger.info(f"Fetching market data for {stock_identifier}")
+        self.logger.info(f"Fetching market data for {ticker_symbol}")
         
         def _get_data():
-            ticker = yf.Ticker(stock_identifier)
+            ticker = yf.Ticker(ticker_symbol)
             # history 和 info 都是同步网络调用
             hist = ticker.history(period="5d")
             if not hist.empty:

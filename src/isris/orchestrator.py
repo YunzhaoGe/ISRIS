@@ -3,10 +3,10 @@ import asyncio
 from datetime import datetime
 from typing import Optional
 
-from .ingestion.manager import IngestionManager
-from .analysis.engine import RiskAnalysisEngine
-from .reporting.generator import ReportGenerator
-from .core.models import RiskAssessmentReport
+from isris.ingestion.manager import IngestionManager
+from isris.analysis.engine import RiskAnalysisEngine
+from isris.reporting.generator import ReportGenerator
+from isris.core.models import RiskAssessmentReport
 
 class ISRISOrchestrator:
     """ISRIS 核心编排器：协调各模块执行完整风险评估流程"""

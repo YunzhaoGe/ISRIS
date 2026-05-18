@@ -13,8 +13,8 @@ try:
 except ImportError:
     completion = None
 
-from ..core.models import ContentItem, RiskAssessmentReport, RiskLevel
-from .prompts import RISK_ANALYSIS_SYSTEM_PROMPT, RISK_ANALYSIS_USER_PROMPT
+from isris.core.models import ContentItem, RiskAssessmentReport, RiskLevel
+from isris.analysis.prompts import RISK_ANALYSIS_SYSTEM_PROMPT, RISK_ANALYSIS_USER_PROMPT
 
 class RiskAnalysisEngine:
     """风险分析引擎：调用真实 LLM 进行多维度研判"""

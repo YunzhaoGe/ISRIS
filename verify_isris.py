@@ -8,7 +8,8 @@ async def verify_isris():
     
     # 支持用户输入，默认为 AAPL
     print("\n" + "="*50)
-    user_input = input("请输入要分析的股票代码 (例如: AAPL, TSLA, NVDA) [默认 AAPL]: ").strip()
+    print("💡 提示: 请输入股票代码 (如 601899.SS, 2899.HK, AAPL)，暂不支持中文名直接搜索")
+    user_input = input("请输入股票代码 [默认 AAPL]: ").strip()
     stock_id = user_input.upper() if user_input else "AAPL"
     print("="*50 + "\n")
     
