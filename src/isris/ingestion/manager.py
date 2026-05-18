@@ -9,7 +9,8 @@ try:
 except ImportError:
     yf = None
 
-from ..core.models import ContentItem, SourceType, MarketQuote
+from isris.core.models import ContentItem, SourceType, MarketQuote
+from isris.ingestion.search import SearchInvestigator
 
 class IngestionManager:
     """数据摄取管理器：协调不同来源的抓取器"""
@@ -17,6 +18,7 @@ class IngestionManager:
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
+        self.search_investigator = SearchInvestigator()
 
     def _normalize_ticker(self, ticker: str) -> str:
         """
@@ -36,15 +38,35 @@ class IngestionManager:
 
     async def fetch_stock_news(self, stock_identifier: str, days: int = 30) -> List[ContentItem]:
         """
-        获取与股票相关的实时新闻和社交媒体讨论。
+        获取与股票相关的实时新闻（并行：RSS + 主动搜索）。
         """
         ticker = self._normalize_ticker(stock_identifier)
-        self.logger.info(f"Fetching real news for {ticker} via RSS...")
+        self.logger.info(f"🛰️  Ingesting multi-source intelligence for {ticker}...")
         
+        # 1. 启动并行任务
+        rss_task = self._fetch_rss_news(ticker)
+        search_task = self.search_investigator.search_stock_risks(ticker)
+        
+        results = await asyncio.gather(rss_task, search_task, return_exceptions=True)
+        
+        all_items = []
+        for res in results:
+            if isinstance(res, list):
+                all_items.extend(res)
+            elif isinstance(res, Exception):
+                self.logger.error(f"Ingestion task failed: {res}")
+
+        # 2. 语义去重 (未来可接入 Horizon 的 SimHash)
+        # 简单根据 URL 去重
+        unique_items = {item.url: item for item in all_items}.values()
+        
+        self.logger.info(f"✅ Ingestion complete: {len(unique_items)} unique signals found.")
+        return list(unique_items)
+
+    async def _fetch_rss_news(self, ticker: str) -> List[ContentItem]:
+        """抓取 RSS 财经新闻"""
         items = []
-        # 使用 Yahoo Finance 的 RSS 作为示例源
         rss_url = f"https://finance.yahoo.com/rss/headline?s={ticker}"
-        
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(rss_url, timeout=10.0)
@@ -52,33 +74,19 @@ class IngestionManager:
                     import xml.etree.ElementTree as ET
                     root = ET.fromstring(response.content)
                     for channel in root.findall("channel"):
-                        for item in channel.findall("item")[:10]: # 限制 10 条
+                        for item in channel.findall("item")[:10]:
                             title = item.find("title").text
                             link = item.find("link").text
-                            pub_date_str = item.find("pubDate").text
-                            # 简单转换时间，生产环境建议用 dateutil
                             items.append(ContentItem(
                                 id=link,
                                 title=title,
-                                content=title, # RSS 通常只给标题
+                                content=title,
                                 url=link,
                                 source_type=SourceType.NEWS,
-                                publish_time=datetime.now(timezone.utc) # 简化处理
+                                publish_time=datetime.now(timezone.utc)
                             ))
             except Exception as e:
-                self.logger.error(f"Error fetching RSS news: {e}")
-
-        # 如果 RSS 失败，返回一个保底的占位符
-        if not items:
-            items.append(ContentItem(
-                id="manual-1",
-                title=f"Monitoring {stock_identifier} for major events",
-                content="System is scanning for news updates...",
-                url=f"https://finance.yahoo.com/quote/{stock_identifier}",
-                source_type=SourceType.NEWS,
-                publish_time=datetime.now(timezone.utc)
-            ))
-            
+                self.logger.warning(f"RSS fetch failed for {ticker}: {e}")
         return items
 
     async def fetch_market_data(self, stock_identifier: str) -> Dict[str, Any]:

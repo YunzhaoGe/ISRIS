@@ -15,6 +15,7 @@ dependencies = [
     "litellm>=1.0.0",
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.0",
+    "duckduckgo-search>=6.0.0",
 ]
 requires-python = ">=3.10"
 
