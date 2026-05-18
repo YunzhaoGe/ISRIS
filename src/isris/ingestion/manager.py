@@ -11,14 +11,16 @@ except ImportError:
 
 from isris.core.models import ContentItem, SourceType, MarketQuote
 from isris.ingestion.search import SearchInvestigator
+from isris.ingestion.extractor import DeepExtractor
 
 class IngestionManager:
-    """数据摄取管理器：协调不同来源的抓取器"""
+    """数据摄取管理器：协调不同来源的抓取器，支持正文深度提取"""
 
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
         self.search_investigator = SearchInvestigator()
+        self.deep_extractor = DeepExtractor()
 
     def _normalize_ticker(self, ticker: str) -> str:
         """
@@ -38,12 +40,12 @@ class IngestionManager:
 
     async def fetch_stock_news(self, stock_identifier: str, days: int = 30) -> List[ContentItem]:
         """
-        获取与股票相关的实时新闻（并行：RSS + 主动搜索）。
+        获取与股票相关的实时新闻（并行：RSS + 主动搜索 + 正文深度提取）。
         """
         ticker = self._normalize_ticker(stock_identifier)
         self.logger.info(f"🛰️  Ingesting multi-source intelligence for {ticker}...")
         
-        # 1. 启动并行任务
+        # 1. 搜集 URL
         rss_task = self._fetch_rss_news(ticker)
         search_task = self.search_investigator.search_stock_risks(ticker)
         
@@ -56,12 +58,25 @@ class IngestionManager:
             elif isinstance(res, Exception):
                 self.logger.error(f"Ingestion task failed: {res}")
 
-        # 2. 语义去重 (未来可接入 Horizon 的 SimHash)
-        # 简单根据 URL 去重
-        unique_items = {item.url: item for item in all_items}.values()
+        # 根据 URL 去重
+        unique_items = {item.url: item for item in all_items}
+        items_list = list(unique_items.values())
+
+        # 2. 深度提取 (Top 3)
+        # 优先选择搜索结果（通常包含更深度的风险信号）
+        deep_targets = [item for item in items_list if item.author == "DuckDuckGo Search"][:3]
+        if deep_targets:
+            self.logger.info(f"🧬 Starting deep extraction for {len(deep_targets)} high-value signals...")
+            extract_tasks = [self.deep_extractor.fetch_full_text(target.url) for target in deep_targets]
+            full_texts = await asyncio.gather(*extract_tasks)
+            
+            # 回填正文
+            for target, text in zip(deep_targets, full_texts):
+                if text:
+                    target.content = text # 用全文覆盖原本简陋的摘要
         
-        self.logger.info(f"✅ Ingestion complete: {len(unique_items)} unique signals found.")
-        return list(unique_items)
+        self.logger.info(f"✅ Ingestion complete: {len(items_list)} unique signals found.")
+        return items_list
 
     async def _fetch_rss_news(self, ticker: str) -> List[ContentItem]:
         """抓取 RSS 财经新闻"""
