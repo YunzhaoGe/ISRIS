@@ -36,11 +36,11 @@ class RiskAnalysisEngine:
         content_items: List[ContentItem],
         market_data: Dict[str, Any],
         historical_context: str = ""
-    ) -> RiskAssessmentReport:
+    ) -> Dict[str, Any]:
         """
-        执行多轮 Agent 协作流程，并结合历史趋势。
+        执行初步分析和审计，返回中间结果以供编排器进行二次侦察。
         """
-        self.logger.info(f"🚀 Starting Reflective AI Workflow for {stock_id}...")
+        self.logger.info(f"🚀 [Wave 1] Starting Initial Probing for {stock_id}...")
 
         # 1. 准备数据负载
         news_content = ""
@@ -56,7 +56,7 @@ class RiskAnalysisEngine:
         )
 
         if not completion:
-            return self._generate_simulated_report(stock_id, content_items, market_data)
+            return {"report": self._generate_simulated_report(stock_id, content_items, market_data), "related_tickers": []}
 
         try:
             # --- 第一阶段：初稿 (Drafting) ---
@@ -71,6 +71,10 @@ class RiskAnalysisEngine:
                 response_format={"type": "json_object"}
             )
             draft_content = draft_res.choices[0].message.content
+            draft_data = json.loads(draft_content)
+            
+            # 提取识别出的关联实体代码
+            related_tickers = [e.get("ticker") for e in draft_data.get("related_entities", []) if e.get("ticker")]
 
             # --- 第二阶段：审计 (Audit/Critique) ---
             self.logger.info("   [Stage 2/3] Performing internal risk audit...")
@@ -78,38 +82,60 @@ class RiskAnalysisEngine:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": RISK_AUDITOR_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"请审计以下初步报告的漏洞，并对比原始数据和历史记录查找矛盾点：\n\n### 初步报告：\n{draft_content}\n\n### 原始数据上下文：\n{user_prompt}"}
+                    {"role": "user", "content": f"请审计以下初步报告的漏洞，特别关注关联实体的风险：\n\n### 初步报告：\n{draft_content}\n\n### 原始数据：\n{user_prompt}"}
                 ],
                 api_key=self.api_key, api_base=self.api_base
             )
             audit_feedback = audit_res.choices[0].message.content
 
-            # --- 第三阶段：定稿 (Finalizing) ---
-            self.logger.info("   [Stage 3/3] Synthesizing final expert report...")
+            return {
+                "draft_content": draft_content,
+                "audit_feedback": audit_feedback,
+                "related_tickers": list(set(related_tickers))[:2], # 只取前2个最相关的进行深度挖掘
+                "original_context": user_prompt
+            }
+
+        except Exception as e:
+            self.logger.error(f"❌ Wave 1 failed: {e}")
+            return {"report": self._generate_simulated_report(stock_id, content_items, market_data), "related_tickers": []}
+
+    async def finalize_expert_report(
+        self,
+        stock_id: str,
+        intermediate_results: Dict[str, Any],
+        contagion_intel: str = ""
+    ) -> RiskAssessmentReport:
+        """
+        整合关联实体的追加情报，生成最终定稿报告。
+        """
+        self.logger.info(f"🚀 [Wave 2] Synthesizing final report with contagion intel...")
+        
+        try:
             final_res = await completion(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": FINAL_REPORT_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"请结合审计反馈，修正初稿中的错误，给出最终的风险报告。\n\n### 初步报告：\n{draft_content}\n\n### 审计官反馈：\n{audit_feedback}"}
+                    {"role": "user", "content": f"请结合审计反馈和新抓取到的“关联实体情报”，修正初稿，生成终版报告。\n\n### 初步报告：\n{intermediate_results['draft_content']}\n\n### 审计反馈：\n{intermediate_results['audit_feedback']}\n\n### ⚠️ 追加的关联实体情报 (Contagion Intel)：\n{contagion_intel or '未发现额外显著异动'}"}
                 ],
                 api_key=self.api_key, api_base=self.api_base,
                 response_format={"type": "json_object"}
             )
             
-            # 解析最终 JSON
             ai_data = json.loads(final_res.choices[0].message.content)
-            self.logger.info(f"✅ Reflective Workflow complete for {stock_id}")
-
+            
             return RiskAssessmentReport(
                 stock_id=stock_id,
                 overall_risk_score=ai_data.get("overall_risk_score", 50),
                 risk_level=RiskLevel(ai_data.get("risk_level", "medium")),
-                summary=ai_data.get("summary", "无法生成摘要"),
+                summary=ai_data.get("summary", "N/A"),
                 key_risks=ai_data.get("key_risks", []),
-                related_entities=ai_data.get("related_entities", []), # 提取关联实体
-                supporting_evidence=[content_items[i] for i in ai_data.get("evidence_indices", []) if i < len(content_items)],
+                related_entities=ai_data.get("related_entities", []),
+                supporting_evidence=[], # 这里可以根据需要回填
                 generated_at=datetime.utcnow()
             )
+        except Exception as e:
+            self.logger.error(f"❌ Wave 2 failed: {e}")
+            return self._generate_simulated_report(stock_id, [], {})
 
         except Exception as e:
             self.logger.error(f"❌ Reflective Workflow failed: {e}")

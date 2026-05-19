@@ -47,10 +47,35 @@ class ISRISOrchestrator:
             new_task.status = "analyzing"
             db.commit()
 
-            # 3. AI 深度分析 (Analysis) - 传入历史上下文
-            report = await self.analysis.analyze_risk(stock_identifier, news_items, market_data, historical_context)
+            # 3. [Wave 1] AI 初步分析与邻居识别
+            # 现在 analyze_risk 返回的是中间结果字典
+            intermediate = await self.analysis.analyze_risk(stock_identifier, news_items, market_data, historical_context)
             
-            # 4. 生成并保存 Markdown 报告
+            # 检查是否为回退模式（即直接返回了 Report 对象）
+            if isinstance(intermediate, RiskAssessmentReport):
+                report = intermediate
+            else:
+                # --- [Wave 1.5] 自动深度联想侦察 ---
+                related_tickers = intermediate.get("related_tickers", [])
+                contagion_intel = ""
+                
+                if related_tickers:
+                    self.logger.info(f"🔍 Discovered related entities: {related_tickers}. Launching background scouting...")
+                    # 为邻居启动快速搜索（只搜不抓全文，以保持速度）
+                    scout_tasks = [self.ingestion.search_investigator.search_stock_risks(t) for t in related_tickers]
+                    scout_results = await asyncio.gather(*scout_tasks, return_exceptions=True)
+                    
+                    intel_parts = []
+                    for t, res in zip(related_tickers, scout_results):
+                        if isinstance(res, list) and res:
+                            top_news = "; ".join([f"{n.title}" for n in res[:3]])
+                            intel_parts.append(f"关联公司 {t} 最新动态: {top_news}")
+                    contagion_intel = "\n".join(intel_parts)
+
+                # 4. [Wave 2] AI 终极定稿 (整合主股票 + 关联公司情报)
+                report = await self.analysis.finalize_expert_report(stock_identifier, intermediate, contagion_intel)
+            
+            # 5. 生成并保存 Markdown 报告
             import os
             report_dir = "reports"
             if not os.path.exists(report_dir):
