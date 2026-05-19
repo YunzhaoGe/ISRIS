@@ -12,6 +12,7 @@ except ImportError:
 from isris.core.models import ContentItem, SourceType, MarketQuote
 from isris.ingestion.search import SearchInvestigator
 from isris.ingestion.extractor import DeepExtractor
+from isris.ingestion.filings import OfficialInvestigator
 
 class IngestionManager:
     """数据摄取管理器：协调不同来源的抓取器，支持正文深度提取"""
@@ -20,60 +21,56 @@ class IngestionManager:
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
         self.search_investigator = SearchInvestigator()
+        self.official_investigator = OfficialInvestigator()
         self.deep_extractor = DeepExtractor()
 
     def _normalize_ticker(self, ticker: str) -> str:
-        """
-        标准化股票代码，自动处理 A 股和港股后缀。
-        """
+        # ... (此处省略规范化逻辑)
         ticker = ticker.upper().strip()
-        # 处理 6 位数字代码 (A 股)
         if len(ticker) == 6 and ticker.isdigit():
-            if ticker.startswith(('6', '9')): # 沪市
-                return f"{ticker}.SS"
-            else: # 深市或北交所
-                return f"{ticker}.SZ"
-        # 处理 4 位或 5 位数字代码 (港股)
+            if ticker.startswith(('6', '9')): return f"{ticker}.SS"
+            else: return f"{ticker}.SZ"
         if (len(ticker) == 4 or len(ticker) == 5) and ticker.isdigit():
             return f"{ticker.zfill(5)}.HK"
         return ticker
 
     async def fetch_stock_news(self, stock_identifier: str, days: int = 30) -> List[ContentItem]:
         """
-        获取与股票相关的实时新闻（并行：RSS + 主动搜索 + 正文深度提取）。
+        获取与股票相关的实时新闻（三轨并行：RSS + 搜索 + 官方公告）。
         """
         ticker = self._normalize_ticker(stock_identifier)
         self.logger.info(f"🛰️  Ingesting multi-source intelligence for {ticker}...")
         
-        # 1. 搜集 URL
+        # 1. 启动并行搜寻任务
         rss_task = self._fetch_rss_news(ticker)
         search_task = self.search_investigator.search_stock_risks(ticker)
+        official_task = self.official_investigator.search_official_announcements(ticker)
         
-        results = await asyncio.gather(rss_task, search_task, return_exceptions=True)
+        results = await asyncio.gather(rss_task, search_task, official_task, return_exceptions=True)
         
         all_items = []
         for res in results:
-            if isinstance(res, list):
-                all_items.extend(res)
-            elif isinstance(res, Exception):
-                self.logger.error(f"Ingestion task failed: {res}")
+            if isinstance(res, list): all_items.extend(res)
+            elif isinstance(res, Exception): self.logger.error(f"Ingestion task failed: {res}")
 
         # 根据 URL 去重
         unique_items = {item.url: item for item in all_items}
         items_list = list(unique_items.values())
 
-        # 2. 深度提取 (Top 3)
-        # 优先选择搜索结果（通常包含更深度的风险信号）
-        deep_targets = [item for item in items_list if item.author == "DuckDuckGo Search"][:3]
+        # 2. 深度提取 (Top 5)
+        # 策略：官方公告必选，搜索结果次之
+        official_items = [item for item in items_list if "[OFFICIAL]" in item.title]
+        search_items = [item for item in items_list if item.author == "DuckDuckGo Search"]
+        
+        deep_targets = (official_items + search_items)[:5]
+        
         if deep_targets:
             self.logger.info(f"🧬 Starting deep extraction for {len(deep_targets)} high-value signals...")
             extract_tasks = [self.deep_extractor.fetch_full_text(target.url) for target in deep_targets]
             full_texts = await asyncio.gather(*extract_tasks)
             
-            # 回填正文
             for target, text in zip(deep_targets, full_texts):
-                if text:
-                    target.content = text # 用全文覆盖原本简陋的摘要
+                if text: target.content = text
         
         self.logger.info(f"✅ Ingestion complete: {len(items_list)} unique signals found.")
         return items_list
