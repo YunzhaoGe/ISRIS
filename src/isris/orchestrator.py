@@ -19,12 +19,21 @@ class ISRISOrchestrator:
 
     async def run_workflow(self, stock_identifier: str, task_id: str) -> RiskAssessmentReport:
         """
-        执行完整的风险评估流水线，状态实时更新至数据库。
+        执行完整的风险评估流水线，状态实时更新至数据库，并支持历史对比。
         """
         db = SessionLocal()
         try:
             self.logger.info(f"Task {task_id}: Starting workflow for {stock_identifier}")
             
+            # 0. 获取历史记录 (New!)
+            history = db.query(DBReport).filter(DBReport.stock_id == stock_identifier).order_by(DBReport.generated_at.desc()).limit(3).all()
+            historical_context = ""
+            if history:
+                hist_list = [f"- {r.generated_at.strftime('%Y-%m-%d')}: 分数={r.overall_risk_score}, 等级={r.risk_level}, 摘要={r.summary[:100]}..." for r in history]
+                historical_context = "\n".join(hist_list)
+            else:
+                historical_context = "尚无该股票的历史评估记录。"
+
             # 1. 创建初始任务记录
             new_task = DBTask(id=task_id, stock_id=stock_identifier, status="processing")
             db.add(new_task)
@@ -38,8 +47,8 @@ class ISRISOrchestrator:
             new_task.status = "analyzing"
             db.commit()
 
-            # 3. AI 深度分析 (Analysis)
-            report = await self.analysis.analyze_risk(stock_identifier, news_items, market_data)
+            # 3. AI 深度分析 (Analysis) - 传入历史上下文
+            report = await self.analysis.analyze_risk(stock_identifier, news_items, market_data, historical_context)
             
             # 4. 生成并保存 Markdown 报告
             import os

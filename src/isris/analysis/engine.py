@@ -14,14 +14,17 @@ except ImportError:
     completion = None
 
 from isris.core.models import ContentItem, RiskAssessmentReport, RiskLevel
-from isris.analysis.prompts import RISK_ANALYSIS_SYSTEM_PROMPT, RISK_ANALYSIS_USER_PROMPT
+from isris.analysis.prompts import (
+    RISK_ANALYSIS_SYSTEM_PROMPT, 
+    RISK_AUDITOR_SYSTEM_PROMPT, 
+    FINAL_REPORT_SYSTEM_PROMPT
+)
 
 class RiskAnalysisEngine:
-    """风险分析引擎：调用真实 LLM 进行多维度研判"""
+    """风险分析引擎：通过“分析-反思-定稿”多轮 Agent 协作生成研报"""
 
     def __init__(self, ai_config: dict = None):
         self.ai_config = ai_config or {}
-        # 优先从环境变量读取配置，方便用户灵活切换
         self.model = os.getenv("AI_MODEL", self.ai_config.get("model", "gpt-4o-mini"))
         self.api_key = os.getenv("AI_API_KEY")
         self.api_base = os.getenv("AI_API_BASE")
@@ -31,49 +34,71 @@ class RiskAnalysisEngine:
         self, 
         stock_id: str, 
         content_items: List[ContentItem],
-        market_data: Dict[str, Any]
+        market_data: Dict[str, Any],
+        historical_context: str = ""
     ) -> RiskAssessmentReport:
         """
-        综合分析所有内容项，调用 LLM 生成真实风险报告。
+        执行多轮 Agent 协作流程，并结合历史趋势。
         """
-        self.logger.info(f"🚀 Real-world AI Analysis for {stock_id} using {self.model}")
+        self.logger.info(f"🚀 Starting Reflective AI Workflow for {stock_id}...")
 
-        # 1. 准备上下文
+        # 1. 准备数据负载
         news_content = ""
         for i, item in enumerate(content_items):
-            news_content += f"[{i}] {item.title}\n内容摘要: {item.content[:200]}...\n\n"
-        
+            news_content += f"[{i}] {item.title}\n内容摘要: {item.content[:500]}...\n\n"
         market_context = json.dumps(market_data, indent=2, ensure_ascii=False)
-
-        # 2. 构建提示词
+        
         user_prompt = RISK_ANALYSIS_USER_PROMPT.format(
             stock_id=stock_id,
+            historical_context=historical_context or "暂无历史记录",
             news_content=news_content or "暂无近期新闻",
             market_context=market_context
         )
 
-        # 3. 调用真实 AI 接口
         if not completion:
-            self.logger.error("litellm not installed, falling back to simulation")
             return self._generate_simulated_report(stock_id, content_items, market_data)
 
         try:
-            # 调用 LiteLLM，显式传入自定义的 api_key 和 api_base
-            response = await completion(
+            # --- 第一阶段：初稿 (Drafting) ---
+            self.logger.info("   [Stage 1/3] Generating preliminary draft...")
+            draft_res = await completion(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": RISK_ANALYSIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
-                api_key=self.api_key,
-                api_base=self.api_base,
+                api_key=self.api_key, api_base=self.api_base,
+                response_format={"type": "json_object"}
+            )
+            draft_content = draft_res.choices[0].message.content
+
+            # --- 第二阶段：审计 (Audit/Critique) ---
+            self.logger.info("   [Stage 2/3] Performing internal risk audit...")
+            audit_res = await completion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": RISK_AUDITOR_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"请审计以下初步报告的漏洞，并对比原始数据和历史记录查找矛盾点：\n\n### 初步报告：\n{draft_content}\n\n### 原始数据上下文：\n{user_prompt}"}
+                ],
+                api_key=self.api_key, api_base=self.api_base
+            )
+            audit_feedback = audit_res.choices[0].message.content
+
+            # --- 第三阶段：定稿 (Finalizing) ---
+            self.logger.info("   [Stage 3/3] Synthesizing final expert report...")
+            final_res = await completion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": FINAL_REPORT_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"请结合审计反馈，修正初稿中的错误，给出最终的风险报告。\n\n### 初步报告：\n{draft_content}\n\n### 审计官反馈：\n{audit_feedback}"}
+                ],
+                api_key=self.api_key, api_base=self.api_base,
                 response_format={"type": "json_object"}
             )
             
-            # 解析 AI 返回的 JSON
-            res_content = response.choices[0].message.content
-            ai_data = json.loads(res_content)
-            self.logger.info(f"✅ AI Analysis completed for {stock_id}")
+            # 解析最终 JSON
+            ai_data = json.loads(final_res.choices[0].message.content)
+            self.logger.info(f"✅ Reflective Workflow complete for {stock_id}")
 
             return RiskAssessmentReport(
                 stock_id=stock_id,
@@ -86,7 +111,7 @@ class RiskAnalysisEngine:
             )
 
         except Exception as e:
-            self.logger.error(f"❌ AI Analysis failed: {e}. Falling back to simulation.")
+            self.logger.error(f"❌ Reflective Workflow failed: {e}")
             return self._generate_simulated_report(stock_id, content_items, market_data)
 
     def _generate_simulated_report(self, stock_id, content_items, market_data) -> RiskAssessmentReport:
