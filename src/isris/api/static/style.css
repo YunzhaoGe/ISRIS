@@ -1,0 +1,178 @@
+:root {
+    --bg-color: #0b0e11;
+    --panel-bg: #1e222d;
+    --border-color: #2a2e39;
+    --text-main: #d1d4dc;
+    --text-muted: #787b86;
+    --accent-color: #2962ff;
+    --risk-low: #089981;
+    --risk-medium: #f23645;
+    --risk-high: #ff9800;
+}
+
+* { box-sizing: border-box; }
+
+body.dark-theme {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    overflow: hidden;
+}
+
+.terminal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: var(--panel-bg);
+    border-bottom: 1px solid var(--border-color);
+    height: 60px;
+}
+
+.logo {
+    font-size: 1.2rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo small { font-size: 0.7rem; color: var(--text-muted); display: block; }
+
+.search-box {
+    display: flex;
+    gap: 10px;
+}
+
+.search-box input {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 4px;
+    width: 300px;
+}
+
+.search-box button {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: filter 0.2s;
+}
+
+.search-box button:hover { filter: brightness(1.2); }
+
+.main-container {
+    display: flex;
+    height: calc(100vh - 60px);
+}
+
+.sidebar {
+    width: 350px;
+    background-color: var(--panel-bg);
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.content-area {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+}
+
+.history-panel h3, .status-panel h3 {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 15px;
+}
+
+#historyList {
+    list-style: none;
+    padding: 0;
+}
+
+.history-item {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.history-item:hover { background-color: var(--bg-color); }
+.history-item .ticker { font-weight: bold; color: var(--accent-color); }
+.history-item .meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 5px; }
+
+.status-indicator {
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.step {
+    padding: 5px 0 5px 25px;
+    position: relative;
+    color: var(--text-muted);
+}
+
+.step::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+}
+
+.step.active { color: var(--accent-color); }
+.step.active::before { border-color: var(--accent-color); background: var(--accent-color); box-shadow: 0 0 10px var(--accent-color); }
+
+.risk-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.badge-low { background: rgba(8, 153, 129, 0.2); color: var(--risk-low); }
+.badge-medium { background: rgba(255, 152, 0, 0.2); color: var(--risk-high); }
+.badge-high, .badge-critical { background: rgba(242, 54, 69, 0.2); color: var(--risk-medium); }
+
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+.empty-state i { font-size: 4rem; margin-bottom: 20px; opacity: 0.3; }
+
+/* Markdown Styling Override */
+.markdown-body {
+    line-height: 1.6;
+}
+
+.markdown-body h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 30px; }
+.markdown-body table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--border-color); padding: 10px; text-align: left; }
+.markdown-body th { background: var(--panel-bg); }
