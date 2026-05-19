@@ -4,7 +4,8 @@ import time
 import sys
 
 async def verify_isris():
-    base_url = "http://127.0.0.1:8000"
+    # 与服务器新端口 8080 保持一致
+    base_url = "http://127.0.0.1:8080"
     
     # 支持用户输入，默认为 AAPL
     print("\n" + "="*50)

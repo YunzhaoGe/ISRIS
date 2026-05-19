@@ -98,5 +98,6 @@ async def get_report(task_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    # 修改为 127.0.0.1 确保本地回环连接稳定
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # 从环境变量读取端口，默认改为 8080 以避开 Windows 常用保留端口
+    port = int(os.getenv("ISRIS_PORT", 8080))
+    uvicorn.run(app, host="127.0.0.1", port=port)
