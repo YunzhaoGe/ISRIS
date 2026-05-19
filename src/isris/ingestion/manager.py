@@ -13,23 +13,31 @@ from isris.core.models import ContentItem, SourceType, MarketQuote
 from isris.ingestion.search import SearchInvestigator
 from isris.ingestion.extractor import DeepExtractor
 from isris.ingestion.filings import OfficialInvestigator
+from isris.ingestion.social import SocialInvestigator
 
 class IngestionManager:
-    """数据摄取管理器：协调不同来源的抓取器，支持正文深度提取"""
+    """数据摄取管理器：协调不同来源的抓取器，支持正文深度提取与社交舆情"""
 
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
         self.search_investigator = SearchInvestigator()
         self.official_investigator = OfficialInvestigator()
+        self.social_investigator = SocialInvestigator()
         self.deep_extractor = DeepExtractor()
 
     def _normalize_ticker(self, ticker: str) -> str:
-        # ... (此处省略规范化逻辑)
+        """
+        标准化股票代码，自动处理 A 股和港股后缀。
+        """
         ticker = ticker.upper().strip()
+        # 处理 6 位数字代码 (A 股)
         if len(ticker) == 6 and ticker.isdigit():
-            if ticker.startswith(('6', '9')): return f"{ticker}.SS"
-            else: return f"{ticker}.SZ"
+            if ticker.startswith(('6', '9')): # 沪市
+                return f"{ticker}.SS"
+            else: # 深市或北交所
+                return f"{ticker}.SZ"
+        # 处理 4 位或 5 位数字代码 (港股)
         if (len(ticker) == 4 or len(ticker) == 5) and ticker.isdigit():
             return f"{ticker.zfill(5)}.HK"
         return ticker
@@ -51,15 +59,17 @@ class IngestionManager:
         
         all_items = []
         for res in results:
-            if isinstance(res, list): all_items.extend(res)
-            elif isinstance(res, Exception): self.logger.error(f"Ingestion task failed: {res}")
+            if isinstance(res, list):
+                all_items.extend(res)
+            elif isinstance(res, Exception):
+                self.logger.error(f"Ingestion task failed: {res}")
 
         # 根据 URL 去重
         unique_items = {item.url: item for item in all_items}
         items_list = list(unique_items.values())
 
         # 2. 深度提取 (Top 5)
-        # 策略：官方公告必选，高价值社交讨论次之
+        # 策略：官方公告必选，高价值社交讨论次之，搜索结果次之
         official_items = [item for item in items_list if "[OFFICIAL]" in item.title]
         social_items = [item for item in items_list if "[SOCIAL]" in item.title]
         search_items = [item for item in items_list if item.author == "DuckDuckGo Search"]
@@ -72,7 +82,8 @@ class IngestionManager:
             full_texts = await asyncio.gather(*extract_tasks)
             
             for target, text in zip(deep_targets, full_texts):
-                if text: target.content = text
+                if text:
+                    target.content = text
         
         self.logger.info(f"✅ Ingestion complete: {len(items_list)} unique signals found.")
         return items_list

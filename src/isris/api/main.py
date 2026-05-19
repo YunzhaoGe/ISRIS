@@ -96,8 +96,26 @@ async def get_report(task_id: str):
     return task_info["report"]
 
 
+def find_available_port(start_port: int) -> int:
+    import socket
+    port = start_port
+    for _ in range(50):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('127.0.0.1', port))
+                return port
+            except OSError:
+                port += 1
+    return 0 # 让系统随机选择
+
 if __name__ == "__main__":
     import uvicorn
-    # 从环境变量读取端口，默认改为 8080 以避开 Windows 常用保留端口
-    port = int(os.getenv("ISRIS_PORT", 8080))
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    # 尝试 8080，如果不行就自动往后找
+    requested_port = int(os.getenv("ISRIS_PORT", 8080))
+    final_port = find_available_port(requested_port)
+    
+    print(f"\n🚀 ISRIS 正在启动...")
+    print(f"🔗 访问地址: http://127.0.0.1:{final_port}")
+    print(f"💡 如果您正在运行 verify_isris.py，请确保连接此端口。\n")
+    
+    uvicorn.run(app, host="127.0.0.1", port=final_port)

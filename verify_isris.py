@@ -4,11 +4,12 @@ import time
 import sys
 
 async def verify_isris():
-    # 与服务器新端口 8080 保持一致
-    base_url = "http://127.0.0.1:8080"
-    
-    # 支持用户输入，默认为 AAPL
+    # 支持手动输入端口，默认为 8080
     print("\n" + "="*50)
+    port_input = input("请输入服务器运行的端口 (参考服务器控制台输出) [默认 8080]: ").strip()
+    port = port_input if port_input else "8080"
+    base_url = f"http://127.0.0.1:{port}"
+    
     print("💡 提示: 请输入股票代码 (如 601899.SS, 2899.HK, AAPL)，暂不支持中文名直接搜索")
     user_input = input("请输入股票代码 [默认 AAPL]: ").strip()
     stock_id = user_input.upper() if user_input else "AAPL"
