@@ -106,6 +106,7 @@ class RiskAnalysisEngine:
                 risk_level=RiskLevel(ai_data.get("risk_level", "medium")),
                 summary=ai_data.get("summary", "无法生成摘要"),
                 key_risks=ai_data.get("key_risks", []),
+                related_entities=ai_data.get("related_entities", []), # 提取关联实体
                 supporting_evidence=[content_items[i] for i in ai_data.get("evidence_indices", []) if i < len(content_items)],
                 generated_at=datetime.utcnow()
             )

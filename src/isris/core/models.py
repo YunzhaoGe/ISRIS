@@ -55,6 +55,7 @@ class RiskAssessmentReport(BaseModel):
     risk_level: RiskLevel
     summary: str
     key_risks: List[Dict[str, Any]]
+    related_entities: List[Dict[str, str]] = [] # 新增：{"ticker": "TSM", "relation": "Supplier", "risk_impact": "High"}
     supporting_evidence: List[ContentItem]
     generated_at: datetime = Field(default_factory=datetime.utcnow)
     analysis_window_days: int = 30

@@ -26,6 +26,7 @@ class DBReport(Base):
     risk_level = Column(String)
     summary = Column(String)
     key_risks = Column(JSON)
+    related_entities = Column(JSON) # 新增关联实体存储
     generated_at = Column(DateTime, default=datetime.utcnow)
     report_file_path = Column(String)
 

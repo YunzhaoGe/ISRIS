@@ -71,6 +71,7 @@ class ISRISOrchestrator:
                 risk_level=report.risk_level.value,
                 summary=report.summary,
                 key_risks=report.key_risks,
+                related_entities=report.related_entities, # 持久化关联实体
                 report_file_path=file_path
             )
             db.add(db_report)

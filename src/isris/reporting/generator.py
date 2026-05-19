@@ -22,7 +22,17 @@ class ReportGenerator:
             md += f"- **[{risk['factor']}]** (影响: {risk['impact']}): {risk['description']}\n"
         md += "\n"
         
-        md += "## 3. 支撑性证据 (Supporting Evidence)\n"
+        # 新增：关联风险分析章节
+        if report.related_entities:
+            md += "## 3. 关联传导风险 (Contagion & Relations)\n"
+            md += "以下是识别出的核心关联实体及其潜在风险影响：\n\n"
+            md += "| 关联公司 (Ticker) | 关系类型 | 风险传导影响 |\n"
+            md += "| :--- | :--- | :--- |\n"
+            for entity in report.related_entities:
+                md += f"| {entity.get('ticker', 'N/A')} | {entity.get('relation', 'N/A')} | {entity.get('risk_impact', 'N/A')} |\n"
+            md += "\n"
+        
+        md += "## 4. 支撑性证据 (Supporting Evidence)\n"
         for i, item in enumerate(report.supporting_evidence):
             md += f"### 证据 [{i+1}]: {item.title}\n"
             md += f"- **来源**: {item.source_type.value}\n"
