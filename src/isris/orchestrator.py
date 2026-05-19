@@ -1,3 +1,8 @@
+import logging
+import asyncio
+from datetime import datetime
+from typing import Optional, Any, Dict
+
 from isris.ingestion.manager import IngestionManager
 from isris.analysis.engine import RiskAnalysisEngine
 from isris.reporting.generator import ReportGenerator
@@ -25,7 +30,7 @@ class ISRISOrchestrator:
         try:
             self.logger.info(f"Task {task_id}: Starting workflow for {stock_identifier}")
             
-            # 0. 获取历史记录 (New!)
+            # 0. 获取历史记录
             history = db.query(DBReport).filter(DBReport.stock_id == stock_identifier).order_by(DBReport.generated_at.desc()).limit(3).all()
             historical_context = ""
             if history:
@@ -48,10 +53,9 @@ class ISRISOrchestrator:
             db.commit()
 
             # 3. [Wave 1] AI 初步分析与邻居识别
-            # 现在 analyze_risk 返回的是中间结果字典
             intermediate = await self.analysis.analyze_risk(stock_identifier, news_items, market_data, historical_context)
             
-            # 检查是否为回退模式（即直接返回了 Report 对象）
+            # 检查是否为回退模式
             if isinstance(intermediate, RiskAssessmentReport):
                 report = intermediate
             else:
@@ -61,7 +65,6 @@ class ISRISOrchestrator:
                 
                 if related_tickers:
                     self.logger.info(f"🔍 Discovered related entities: {related_tickers}. Launching background scouting...")
-                    # 为邻居启动快速搜索（只搜不抓全文，以保持速度）
                     scout_tasks = [self.ingestion.search_investigator.search_stock_risks(t) for t in related_tickers]
                     scout_results = await asyncio.gather(*scout_tasks, return_exceptions=True)
                     
@@ -72,7 +75,7 @@ class ISRISOrchestrator:
                             intel_parts.append(f"关联公司 {t} 最新动态: {top_news}")
                     contagion_intel = "\n".join(intel_parts)
 
-                # 4. [Wave 2] AI 终极定稿 (整合主股票 + 关联公司情报)
+                # 4. [Wave 2] AI 终极定稿
                 report = await self.analysis.finalize_expert_report(stock_identifier, intermediate, contagion_intel)
             
             # 5. 生成并保存 Markdown 报告
@@ -88,7 +91,7 @@ class ISRISOrchestrator:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
             
-            # 5. 持久化报告数据
+            # 6. 持久化报告数据
             db_report = DBReport(
                 task_id=task_id,
                 stock_id=stock_identifier,
@@ -96,7 +99,7 @@ class ISRISOrchestrator:
                 risk_level=report.risk_level.value,
                 summary=report.summary,
                 key_risks=report.key_risks,
-                related_entities=report.related_entities, # 持久化关联实体
+                related_entities=report.related_entities,
                 report_file_path=file_path
             )
             db.add(db_report)
@@ -111,7 +114,6 @@ class ISRISOrchestrator:
 
         except Exception as e:
             self.logger.error(f"Task {task_id}: Workflow failed: {str(e)}")
-            # 记录错误状态
             failed_task = db.query(DBTask).filter(DBTask.id == task_id).first()
             if failed_task:
                 failed_task.status = "failed"
@@ -142,13 +144,13 @@ class ISRISOrchestrator:
             }
             
             if task.status == "completed" and task.report:
-                # 构造一个兼容旧接口的字典
                 result["report"] = {
                     "stock_id": task.report.stock_id,
                     "overall_risk_score": task.report.overall_risk_score,
                     "risk_level": task.report.risk_level,
                     "summary": task.report.summary,
                     "key_risks": task.report.key_risks,
+                    "related_entities": task.report.related_entities,
                     "report_file": task.report.report_file_path
                 }
             
