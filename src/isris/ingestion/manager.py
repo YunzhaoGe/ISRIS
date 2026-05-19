@@ -36,17 +36,18 @@ class IngestionManager:
 
     async def fetch_stock_news(self, stock_identifier: str, days: int = 30) -> List[ContentItem]:
         """
-        获取与股票相关的实时新闻（三轨并行：RSS + 搜索 + 官方公告）。
+        获取与股票相关的实时信息（四轨并行：RSS + 搜索 + 官方公告 + 社交舆情）。
         """
         ticker = self._normalize_ticker(stock_identifier)
-        self.logger.info(f"🛰️  Ingesting multi-source intelligence for {ticker}...")
+        self.logger.info(f"🛰️  Ingesting 360-degree intelligence for {ticker}...")
         
         # 1. 启动并行搜寻任务
         rss_task = self._fetch_rss_news(ticker)
         search_task = self.search_investigator.search_stock_risks(ticker)
         official_task = self.official_investigator.search_official_announcements(ticker)
+        social_task = self.social_investigator.search_chinese_sentiment(ticker)
         
-        results = await asyncio.gather(rss_task, search_task, official_task, return_exceptions=True)
+        results = await asyncio.gather(rss_task, search_task, official_task, social_task, return_exceptions=True)
         
         all_items = []
         for res in results:
@@ -58,11 +59,12 @@ class IngestionManager:
         items_list = list(unique_items.values())
 
         # 2. 深度提取 (Top 5)
-        # 策略：官方公告必选，搜索结果次之
+        # 策略：官方公告必选，高价值社交讨论次之
         official_items = [item for item in items_list if "[OFFICIAL]" in item.title]
+        social_items = [item for item in items_list if "[SOCIAL]" in item.title]
         search_items = [item for item in items_list if item.author == "DuckDuckGo Search"]
         
-        deep_targets = (official_items + search_items)[:5]
+        deep_targets = (official_items + social_items + search_items)[:5]
         
         if deep_targets:
             self.logger.info(f"🧬 Starting deep extraction for {len(deep_targets)} high-value signals...")
