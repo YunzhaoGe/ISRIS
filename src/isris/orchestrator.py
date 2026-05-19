@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict
 
 from isris.ingestion.manager import IngestionManager
@@ -55,7 +55,7 @@ class ISRISOrchestrator:
             # 3. [Wave 1] AI 初步分析与邻居识别
             intermediate = await self.analysis.analyze_risk(stock_identifier, news_items, market_data, historical_context)
             
-            # 检查是否为回退模式
+            # 检查是否为回退模式（即分析引擎出错直接返回了模拟 Report）
             if isinstance(intermediate, RiskAssessmentReport):
                 report = intermediate
             else:
@@ -65,6 +65,7 @@ class ISRISOrchestrator:
                 
                 if related_tickers:
                     self.logger.info(f"🔍 Discovered related entities: {related_tickers}. Launching background scouting...")
+                    # 为邻居启动快速搜索（只搜不抓全文，以保持速度）
                     scout_tasks = [self.ingestion.search_investigator.search_stock_risks(t) for t in related_tickers]
                     scout_results = await asyncio.gather(*scout_tasks, return_exceptions=True)
                     
@@ -75,7 +76,7 @@ class ISRISOrchestrator:
                             intel_parts.append(f"关联公司 {t} 最新动态: {top_news}")
                     contagion_intel = "\n".join(intel_parts)
 
-                # 4. [Wave 2] AI 终极定稿
+                # 4. [Wave 2] AI 终极定稿 (整合主股票 + 关联公司情报)
                 report = await self.analysis.finalize_expert_report(stock_identifier, intermediate, contagion_intel)
             
             # 5. 生成并保存 Markdown 报告
@@ -85,7 +86,7 @@ class ISRISOrchestrator:
                 os.makedirs(report_dir)
             
             md_content = ReportGenerator.generate_markdown(report)
-            file_name = f"{stock_identifier}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            file_name = f"{stock_identifier}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
             file_path = os.path.join(report_dir, file_name)
             
             with open(file_path, "w", encoding="utf-8") as f:
@@ -106,7 +107,7 @@ class ISRISOrchestrator:
             
             # 更新任务为完成
             new_task.status = "completed"
-            new_task.end_time = datetime.utcnow()
+            new_task.end_time = datetime.now(timezone.utc)
             db.commit()
             
             self.logger.info(f"Task {task_id}: Workflow completed. Report saved to {file_path}")
@@ -114,11 +115,12 @@ class ISRISOrchestrator:
 
         except Exception as e:
             self.logger.error(f"Task {task_id}: Workflow failed: {str(e)}")
+            # 记录错误状态
             failed_task = db.query(DBTask).filter(DBTask.id == task_id).first()
             if failed_task:
                 failed_task.status = "failed"
                 failed_task.error = str(e)
-                failed_task.end_time = datetime.utcnow()
+                failed_task.end_time = datetime.now(timezone.utc)
                 db.commit()
             raise
         finally:
@@ -144,6 +146,7 @@ class ISRISOrchestrator:
             }
             
             if task.status == "completed" and task.report:
+                # 构造一个兼容旧接口的字典
                 result["report"] = {
                     "stock_id": task.report.stock_id,
                     "overall_risk_score": task.report.overall_risk_score,

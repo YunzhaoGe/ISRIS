@@ -16,9 +16,11 @@ except ImportError:
 from isris.core.models import ContentItem, RiskAssessmentReport, RiskLevel
 from isris.analysis.prompts import (
     RISK_ANALYSIS_SYSTEM_PROMPT, 
+    RISK_ANALYSIS_USER_PROMPT,
     RISK_AUDITOR_SYSTEM_PROMPT, 
     FINAL_REPORT_SYSTEM_PROMPT
 )
+from datetime import timezone
 
 class RiskAnalysisEngine:
     """风险分析引擎：通过“分析-反思-定稿”多轮 Agent 协作生成研报"""

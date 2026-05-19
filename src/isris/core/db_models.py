@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class DBTask(Base):
     __tablename__ = "tasks"
@@ -9,7 +9,7 @@ class DBTask(Base):
     id = Column(String, primary_key=True, index=True)
     stock_id = Column(String, index=True)
     status = Column(String) # processing, analyzing, completed, failed
-    start_time = Column(DateTime, default=datetime.utcnow)
+    start_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     end_time = Column(DateTime, nullable=True)
     error = Column(String, nullable=True)
 
@@ -27,7 +27,7 @@ class DBReport(Base):
     summary = Column(String)
     key_risks = Column(JSON)
     related_entities = Column(JSON) # 新增关联实体存储
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     report_file_path = Column(String)
 
     task = relationship("DBTask", back_populates="report")
