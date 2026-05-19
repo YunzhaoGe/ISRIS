@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
-import datetime
+from datetime import datetime
 
 class DBTask(Base):
     __tablename__ = "tasks"
